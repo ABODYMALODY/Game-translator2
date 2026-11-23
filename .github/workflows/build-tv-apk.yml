@@ -1,0 +1,53 @@
+name: Build TV app
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Put files in their folders (works even if they were uploaded without folders)
+        run: |
+          if [ -f game_translator_tv/app/build.gradle.kts ]; then echo "Folders are fine"; exit 0; fi
+          T=game_translator_tv
+          mkdir -p $T/app/src/main/java/com/gametranslator/tv $T/app/src/main/res/drawable $T/app/src/main/res/values $T/gradle/wrapper
+          for f in *.kts; do
+            if grep -q 'namespace' "$f"; then cp "$f" $T/app/build.gradle.kts
+            elif grep -q 'apply false' "$f"; then cp "$f" $T/build.gradle.kts
+            elif grep -q 'include(' "$f"; then cp "$f" $T/settings.gradle.kts
+            fi
+          done
+          cp gradle.properties gradlew gradlew.bat $T/
+          cp gradle-wrapper.jar gradle-wrapper.properties $T/gradle/wrapper/
+          cp AndroidManifest.xml $T/app/src/main/
+          cp *.kt $T/app/src/main/java/com/gametranslator/tv/
+          cp banner.xml icon.xml $T/app/src/main/res/drawable/
+          cp strings.xml $T/app/src/main/res/values/
+          find $T -type f | sort
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Build APK
+        working-directory: game_translator_tv
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk GameTranslatorTV.apk
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: tv-v${{ github.run_number }}
+          name: Game Translator TV ${{ github.run_number }}
+          files: game_translator_tv/GameTranslatorTV.apk
+          make_latest: true
